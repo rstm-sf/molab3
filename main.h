@@ -26,13 +26,21 @@ inline double f(const point3d_t x) {
 	return tmp;
 }
 
+inline double g1(const point3d_t x) {
+	return x.x[0] * x.x[0] + x.x[1] * x.x[1] + x.x[2] * x.x[2] - 4.0;
+}
+
 inline double g1_cut(const point3d_t x) {
-	const double tmp = x.x[0] * x.x[0] + x.x[1] * x.x[1] + x.x[2] * x.x[2] - 4.0;
+	const double tmp = g1(x);
 	return  tmp <= 0.0 ? 0.0 : tmp;
 }
 
+inline double g2(const point3d_t x) {
+	return -x.x[2];
+}
+
 inline double g2_cut(const point3d_t x) {
-	const double tmp = -x.x[2];
+	const double tmp = g2(x);
 	return  tmp <= 0.0 ? 0.0 : tmp;
 }
 
@@ -42,13 +50,19 @@ inline double p_ext(const point3d_t x, const double rk) {
 	return rk * 0.5 * (g1_x * g1_x + g2_x * g2_x);
 }
 
+inline double p_int(const point3d_t x, const double rk) {
+	const double g1_x = g1(x);
+	const double g2_x = g2(x);
+	return -rk * (log(-g1_x) + log(-g2_x));
+}
+
 inline mat3d_t hessian_ext(const point3d_t x, const double rk) {
 	mat3d_t H;
 	const double g1_x = g1_cut(x);
 	const double g2_x = g2_cut(x);
 	if (g1_x > 0.0) {
 		const double tmp = g2_x > 0.0 ? 0.5 : 0.0;
-		H.a[0] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[0] * x.x[0] + tmp));
+		H.a[0] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[0] * x.x[0]));
 		H.a[1] = 4.0 * rk * x.x[0] * x.x[1];
 		H.a[2] = 4.0 * rk * x.x[0] * x.x[2];
 		H.a[3] = H.a[1];
@@ -56,7 +70,7 @@ inline mat3d_t hessian_ext(const point3d_t x, const double rk) {
 		H.a[5] = 4.0 * rk * x.x[1] * x.x[2];
 		H.a[6] = H.a[2];
 		H.a[7] = H.a[5];
-		H.a[8] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[2] * x.x[2]));
+		H.a[8] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[2] * x.x[2] + tmp));
 	} else {
 		if (g2_x > 0.0) {
 			H.a[0] = 2.0 + rk;
@@ -66,6 +80,30 @@ inline mat3d_t hessian_ext(const point3d_t x, const double rk) {
 		H.a[4] = H.a[8] = 2.0;
 		H.a[1] = H.a[2] = H.a[3] = H.a[5] = H.a[6] = H.a[7] = 0.0;
 	}
+
+	return H;
+}
+
+inline mat3d_t hessian_int(const point3d_t x, const double rk) {
+	const double g1_x = -g1(x);
+	const double g2_x = -g2(x);
+	const double inv_g1_x = 1.0 / g1_x;
+	const double inv_g1_x2 = inv_g1_x * inv_g1_x;
+	const double z2 = x.x[2] * x.x[2];
+	const double h1 = 4.0 * rk * x.x[0] * x.x[1] * inv_g1_x2;
+	const double h2 = 4.0 * rk * x.x[0] * x.x[2] * inv_g1_x2;
+	const double h5 = 4.0 * rk * x.x[1] * x.x[2] * inv_g1_x2;
+	const mat3d_t H = {
+		2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[0] * x.x[0]) * inv_g1_x2),
+		h1,
+		h2,
+		h1,
+		2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[1] * x.x[1]) * inv_g1_x2),
+		h5,
+		h2,
+		h5,
+		2.0 * (1.0 + rk * ((g1_x + 2.0 * z2) * inv_g1_x2 + 0.5 / z2))
+	};
 
 	return H;
 }
@@ -106,17 +144,16 @@ inline mat3d_t inversed_mat3d(const mat3d_t mat) {
 	mat3d_t inv_mat3d = { 0 };
 	if (det_mat != 0.0) {
 		const double inv_det_mat = 1.0 / det_mat;
-		inv_mat3d.a[0] = mat.a[0] * inv_det_mat * minor2d(mat.a[4], mat.a[5], mat.a[7], mat.a[8]);
-		inv_mat3d.a[1] = mat.a[3] * inv_det_mat * minor2d(mat.a[1], mat.a[2], mat.a[7], mat.a[8]);
-		inv_mat3d.a[2] = mat.a[6] * inv_det_mat * minor2d(mat.a[1], mat.a[2], mat.a[4], mat.a[5]);
-		inv_mat3d.a[3] = mat.a[1] * inv_det_mat * minor2d(mat.a[3], mat.a[5], mat.a[6], mat.a[8]);
-		inv_mat3d.a[4] = mat.a[4] * inv_det_mat * minor2d(mat.a[0], mat.a[2], mat.a[6], mat.a[8]);
-		inv_mat3d.a[5] = mat.a[7] * inv_det_mat * minor2d(mat.a[0], mat.a[2], mat.a[3], mat.a[5]);
-		inv_mat3d.a[6] = mat.a[2] * inv_det_mat * minor2d(mat.a[3], mat.a[4], mat.a[6], mat.a[7]);
-		inv_mat3d.a[7] = mat.a[5] * inv_det_mat * minor2d(mat.a[0], mat.a[1], mat.a[6], mat.a[7]);
-		inv_mat3d.a[8] = mat.a[8] * inv_det_mat * minor2d(mat.a[0], mat.a[1], mat.a[3], mat.a[4]);
-	}
-	else {
+		inv_mat3d.a[0] =  mat.a[0] * inv_det_mat * minor2d(mat.a[4], mat.a[5], mat.a[7], mat.a[8]);
+		inv_mat3d.a[1] = -mat.a[3] * inv_det_mat * minor2d(mat.a[1], mat.a[2], mat.a[7], mat.a[8]);
+		inv_mat3d.a[2] =  mat.a[6] * inv_det_mat * minor2d(mat.a[1], mat.a[2], mat.a[4], mat.a[5]);
+		inv_mat3d.a[3] = -mat.a[1] * inv_det_mat * minor2d(mat.a[3], mat.a[5], mat.a[6], mat.a[8]);
+		inv_mat3d.a[4] =  mat.a[4] * inv_det_mat * minor2d(mat.a[0], mat.a[2], mat.a[6], mat.a[8]);
+		inv_mat3d.a[5] = -mat.a[7] * inv_det_mat * minor2d(mat.a[0], mat.a[2], mat.a[3], mat.a[5]);
+		inv_mat3d.a[6] =  mat.a[2] * inv_det_mat * minor2d(mat.a[3], mat.a[4], mat.a[6], mat.a[7]);
+		inv_mat3d.a[7] = -mat.a[5] * inv_det_mat * minor2d(mat.a[0], mat.a[1], mat.a[6], mat.a[7]);
+		inv_mat3d.a[8] =  mat.a[8] * inv_det_mat * minor2d(mat.a[0], mat.a[1], mat.a[3], mat.a[4]);
+	} else {
 		printf("ERR: Determinant = 0!\n");
 	}
 
@@ -140,17 +177,29 @@ inline point3d_t grad_f_ext(const point3d_t x, const double rk) {
 	const double g1_x = g1_cut(x);
 	const double g2_x = g2_cut(x);
 	point3d_t grad;
-	const double tmp = g2_x > 0.0 ? 2.0 * x.x[0] : 0.0;
+	const double tmp = g2_x > 0.0 ? 2.0 * x.x[2] : 0.0;
 
 	if (g1_x > 0.0) {
-		grad.x[0] = 2.0 * (x.x[0] - 1.0) + rk * (x.x[0] * 2.0 * g1_x + tmp);
+		grad.x[0] = 2.0 * (x.x[0] - 1.0) + rk * 2.0 * x.x[0] * g1_x;
 		grad.x[1] = 2.0 * (x.x[1] - 1.0) + rk * 2.0 * x.x[1] * g1_x;
-		grad.x[2] = 2.0 * (x.x[2] - 1.0) + rk * 2.0 * x.x[2] * g1_x;
+		grad.x[2] = 2.0 * (x.x[2] - 1.0) + rk * (x.x[2] * 2.0 * g1_x + tmp);
 	} else {
-		grad.x[0] = 2.0 * (x.x[0] - 1.0) + rk * tmp;
+		grad.x[0] = 2.0 * (x.x[0] - 1.0);
 		grad.x[1] = 2.0 * (x.x[1] - 1.0);
-		grad.x[2] = 2.0 * (x.x[2] - 1.0);
+		grad.x[2] = 2.0 * (x.x[2] - 1.0) + rk * tmp;
 	}
+
+	return grad;
+}
+
+inline point3d_t grad_f_int(const point3d_t x, const double rk) {
+	const double g1_x = -g1(x);
+	const double inv_g1_x = 1.0 / g1_x;
+	const point3d_t grad = {
+		2.0 * (x.x[0] * (1.0 + rk * inv_g1_x) - 1.0),
+		2.0 * (x.x[1] * (1.0 + rk * inv_g1_x) - 1.0),
+		2.0 * (x.x[2] - 1.0 + rk * (x.x[2] * inv_g1_x - 0.5 / x.x[2]))
+	};
 
 	return grad;
 }
@@ -166,21 +215,39 @@ inline double findT_ext(const point3d_t x, const double rk, const point3d_t d) {
 	const double main2 = 2.0 * normd_2;
 	double res;
 	if (g1_x > 0.0) {
-		const double tmp1 = g2_x > 0 ? x.x[0] * d.x[0] : 0.0;
-		const double tmp2 = g2_x > 0 ? d.x[0] * d.x[0] : 0.0;
+		const double tmp1 = g2_x > 0 ? x.x[2] * d.x[2] : 0.0;
+		const double tmp2 = g2_x > 0 ? d.x[2] * d.x[2] : 0.0;
 		const double normx_2 = dotProduct3d(x, x);
 		res = (main1 - rk * (2.0 * normx_2 * dotxd + tmp1)) /
 		      (main2 + rk * (2.0 * normd_2 * normx_2 + 4.0 * dsum * dotxd + tmp2));
 	} else {
 		if (g2_x > 0.0) {
-			res = (main1 - rk * x.x[0] * d.x[0]) /
-			      (main2 + rk * d.x[0] * d.x[0]);
+			res = (main1 - rk * x.x[2] * d.x[2]) /
+			      (main2 + rk * d.x[2] * d.x[2]);
 		} else {
 			res = main1 / main2;
 		}
 	}
 
 	return res;
+}
+
+inline double findT_int(const point3d_t x, const double rk, const point3d_t d) {
+	const double g1_x = g1(x);
+	const double dsum = d.x[0] + d.x[1] + d.x[2];
+	const double dotxd = dotProduct3d(x, d);
+	const double normd_2 = dotProduct3d(d, d);
+	const double d3 = d.x[2];
+	const double z = x.x[2];
+	const double tmp1 = dotxd * z;
+	const double tmp2 = d3 * g1_x;
+	const double tmp3 = dsum * z;
+	const double numerator = (tmp3 - tmp1) * g1_x + rk * (tmp1 + tmp2 * 0.5);
+	const double denominator = dotxd * (tmp1 * 2.0 - tmp2 - 2.0 * tmp3) -
+	                           dsum * tmp2 + normd_2 * z * g1_x -
+	                           rk * (2.0 * d3 * dotxd + tmp3);
+
+	return numerator / denominator;
 }
 
 point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const uint32_t maxIter, const double rk,
