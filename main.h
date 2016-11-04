@@ -36,14 +36,10 @@ inline double g2_cut(const point3d_t x) {
 	return  tmp <= 0.0 ? 0.0 : tmp;
 }
 
-inline double p(const point3d_t x, const double rk) {
+inline double p_ext(const point3d_t x, const double rk) {
 	const double g1_x = g1_cut(x);
 	const double g2_x = g2_cut(x);
 	return rk * 0.5 * (g1_x * g1_x + g2_x * g2_x);
-}
-
-inline double helpF(const point3d_t x, const double rk) {
-	return f(x) + p(x, rk);
 }
 
 inline mat3d_t hessian_ext(const point3d_t x, const double rk) {
@@ -188,7 +184,8 @@ inline double findT_ext(const point3d_t x, const double rk, const point3d_t d) {
 }
 
 point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const uint32_t maxIter, const double rk,
-	mat3d_t (*hessian)(point3d_t, double), point3d_t (*grad_fun)(point3d_t, double), double (*findT)(point3d_t x, double, point3d_t)) {
+	double (*p)(point3d_t, double), mat3d_t (*hessian)(point3d_t, double), point3d_t (*grad_fun)(point3d_t, double),
+	double (*findT)(point3d_t x, double, point3d_t)) {
 	printf("Start Newton-Raphson Method...\n");
 	const double epsilon2 = epsilon * epsilon;
 	point3d_t xk1 = x0;
@@ -215,7 +212,7 @@ point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const ui
 		xk1 = add_vec3d(xk1, xk1_minus_xk);
 
 		convergence = dotProduct3d(xk1_minus_xk, xk1_minus_xk);
-		const double abs_fk1_minus_fk = fabs(f(xk1) - f(xk));
+		const double abs_fk1_minus_fk = fabs(p(xk1, rk) - p(xk, rk));
 		if (convergence < epsilon2 && abs_fk1_minus_fk < epsilon) {
 			if (is_seq) {
 				break;

@@ -3,7 +3,7 @@
 point3d_t methodExternalPenalty(point3d_t x0, double r0, double C, double epsilon);
 
 int8_t main() {
-	const point3d_t x0   = { 0, 0, 0 };
+	const point3d_t x0   = { 100, 550, 550 };
 	const double    r0   = 0.1;
 	const double    C    = 2.0;
 	const double epsilon = 1e-2;
@@ -24,10 +24,10 @@ point3d_t methodExternalPenalty(const point3d_t x0, const double r0, const doubl
 	point3d_t xk = x0;
 	double pk    = 0.0;
 	uint32_t k   = 0;
-	
+
 	for (k; k < maxIter; ++k) {
-		xk = methodNewtonRaphson(xk, epsilon, maxIter, rk, hessian_ext, grad_f_ext, findT_ext);
-		pk = p(xk, rk);
+		xk = methodNewtonRaphson(xk, epsilon, maxIter, rk, p_ext, hessian_ext, grad_f_ext, findT_ext);
+		pk = p_ext(xk, rk);
 		if (pk <= epsilon) {
 			break;
 		}
