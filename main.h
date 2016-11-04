@@ -26,19 +26,19 @@ inline double f(const point3d_t x) {
 	return tmp;
 }
 
-inline double g1(const point3d_t x) {
+inline double g1_cut(const point3d_t x) {
 	const double tmp = x.x[0] * x.x[0] + x.x[1] * x.x[1] + x.x[2] * x.x[2] - 4.0;
 	return  tmp <= 0.0 ? 0.0 : tmp;
 }
 
-inline double g2(const point3d_t x) {
+inline double g2_cut(const point3d_t x) {
 	const double tmp = -x.x[2];
 	return  tmp <= 0.0 ? 0.0 : tmp;
 }
 
 inline double p(const point3d_t x, const double rk) {
-	const double g1_x = g1(x);
-	const double g2_x = g2(x);
+	const double g1_x = g1_cut(x);
+	const double g2_x = g2_cut(x);
 	return rk * 0.5 * (g1_x * g1_x + g2_x * g2_x);
 }
 
@@ -46,10 +46,10 @@ inline double helpF(const point3d_t x, const double rk) {
 	return f(x) + p(x, rk);
 }
 
-inline mat3d_t hessian(const point3d_t x, const double rk) {
+inline mat3d_t hessian_ext(const point3d_t x, const double rk) {
 	mat3d_t H;
-	const double g1_x = g1(x);
-	const double g2_x = g2(x);
+	const double g1_x = g1_cut(x);
+	const double g2_x = g2_cut(x);
 	if (g1_x > 0.0) {
 		const double tmp = g2_x > 0.0 ? 0.5 : 0.0;
 		H.a[0] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[0] * x.x[0] + tmp));
@@ -140,9 +140,9 @@ inline bool isPositiveDefMat3d(const mat3d_t mat) {
 	}
 }
 
-inline point3d_t grad_f(const point3d_t x, const double rk) {
-	const double g1_x = g1(x);
-	const double g2_x = g2(x);
+inline point3d_t grad_f_ext(const point3d_t x, const double rk) {
+	const double g1_x = g1_cut(x);
+	const double g2_x = g2_cut(x);
 	point3d_t grad;
 	const double tmp = g2_x > 0.0 ? 2.0 * x.x[0] : 0.0;
 
@@ -159,10 +159,10 @@ inline point3d_t grad_f(const point3d_t x, const double rk) {
 	return grad;
 }
 
-inline double findT_phi(const point3d_t x, const double rk, const point3d_t d) {
+inline double findT_ext(const point3d_t x, const double rk, const point3d_t d) {
 	// Quadratic function: d^phi/dt^2 >= 0
-	const double g1_x = g1(x);
-	const double g2_x = g2(x);
+	const double g1_x = g1_cut(x);
+	const double g2_x = g2_cut(x);
 	const double dsum = d.x[0] + d.x[1] + d.x[2];
 	const double dotxd = dotProduct3d(x, d);
 	const double normd_2 = dotProduct3d(d, d);
@@ -187,7 +187,8 @@ inline double findT_phi(const point3d_t x, const double rk, const point3d_t d) {
 	return res;
 }
 
-point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const uint32_t maxIter, const double rk) {
+point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const uint32_t maxIter, const double rk,
+	mat3d_t (*hessian)(point3d_t, double), point3d_t (*grad_fun)(point3d_t, double), double (*findT)(point3d_t x, double, point3d_t)) {
 	printf("Start Newton-Raphson Method...\n");
 	const double epsilon2 = epsilon * epsilon;
 	point3d_t xk1 = x0;
@@ -196,7 +197,7 @@ point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const ui
 	double convergence;
 
 	for (k; k < maxIter; ++k) {
-		const point3d_t grad_fun_xk1 = grad_f(xk1, rk);
+		const point3d_t grad_fun_xk1 = grad_fun(xk1, rk);
 		const double    dot_grad_xk1 = dotProduct3d(grad_fun_xk1, grad_fun_xk1);
 		if (dot_grad_xk1 < epsilon2) {
 			printf("grad f(xk) = %.e < epsilon = %.2e\n", sqrt(dot_grad_xk1), epsilon);
@@ -209,7 +210,7 @@ point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const ui
 		                                             : scalarmul_vec3d(-1.0, grad_fun_xk1);
 
 		const point3d_t xk = xk1;
-		const double t = findT_phi(xk, rk, d);
+		const double t = findT(xk, rk, d);
 		const point3d_t xk1_minus_xk = scalarmul_vec3d(t, d);
 		xk1 = add_vec3d(xk1, xk1_minus_xk);
 
