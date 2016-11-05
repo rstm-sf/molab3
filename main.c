@@ -4,14 +4,14 @@ point3d_t methodExternalPenalty(point3d_t x0, double r0, double C, double epsilo
 point3d_t methodInternalPenalty(point3d_t x0, double r0, double C, double epsilon);
 
 int8_t main() {
-	const point3d_t x0   = { 100, 550, 550 };
-	const double    r0   = 0.1;
-	const double    C    = 2.0;
-	const double epsilon = 1e-2;
+	const point3d_t x0 = { 1, 1, 1 };
+	const double    r0 = 0.1;
+	const double    C = 2.0;
+	const double epsilon = 1e-6;
 
 	point3d_t xmin;
-	const uint8_t test = 2; // 1 - External Penalty metod
-	                        // 2 - Internal Penalty metod
+	const uint8_t test = 1; // 1 - External Penalty metod
+							// 2 - Internal Penalty metod
 	switch (test) {
 	case 1:
 		xmin = methodExternalPenalty(x0, r0, C, epsilon);
@@ -35,14 +35,14 @@ point3d_t methodExternalPenalty(const point3d_t x0, const double r0, const doubl
 	printf("Start External Penalty metod...\n");
 	printf("x0 = (%.2f, %.2f, %.2f)\n", x0.x[0], x0.x[1], x0.x[2]);
 	printf("r0 = %f; C = %f; epsilon = %.2e\n", r0, C, epsilon);
-	const uint32_t maxIter = 100;
-	double rk    = r0;
+	const uint32_t maxIter = 10000;
+	double rk = r0;
 	point3d_t xk = x0;
-	double pk    = 0.0;
-	uint32_t k   = 0;
+	double pk = 0.0;
+	uint32_t k = 0;
 
 	for (k; k < maxIter; ++k) {
-		xk = methodNewtonRaphson(xk, epsilon, maxIter, rk, p_ext, hessian_ext, grad_f_ext, findT_ext);
+		xk = nonlinearConjugateGradientMethod(xk, epsilon, maxIter, rk, p_ext, grad_f_ext);
 		pk = p_ext(xk, rk);
 		if (pk <= epsilon) {
 			break;
@@ -65,8 +65,8 @@ point3d_t methodInternalPenalty(const point3d_t x0, const double r0, const doubl
 	double pk = 0.0;
 	uint32_t k = 0;
 
-	for (k; k < maxIter; ++k) {
-		xk = methodNewtonRaphson(xk, epsilon, maxIter, rk, p_int, hessian_int, grad_f_int, findT_int);
+	for (k; k <maxIter; ++k) {
+		xk = nonlinearConjugateGradientMethod(xk, epsilon, maxIter, rk, p_int, grad_f_int);
 		pk = p_int(xk, rk);
 		if (fabs(pk) <= epsilon) {
 			break;

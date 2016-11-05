@@ -8,6 +8,11 @@
 #include <math.h>
 #include <stdlib.h>
 
+typedef struct segment {
+	double a;
+	double b;
+} segment_t;
+
 typedef struct point3d {
 	double x[3];
 } point3d_t;
@@ -53,59 +58,10 @@ inline double p_ext(const point3d_t x, const double rk) {
 inline double p_int(const point3d_t x, const double rk) {
 	const double g1_x = g1(x);
 	const double g2_x = g2(x);
-	return -rk * (log(-g1_x) + log(-g2_x));
-}
-
-inline mat3d_t hessian_ext(const point3d_t x, const double rk) {
-	mat3d_t H;
-	const double g1_x = g1_cut(x);
-	const double g2_x = g2_cut(x);
-	if (g1_x > 0.0) {
-		const double tmp = g2_x > 0.0 ? 0.5 : 0.0;
-		H.a[0] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[0] * x.x[0]));
-		H.a[1] = 4.0 * rk * x.x[0] * x.x[1];
-		H.a[2] = 4.0 * rk * x.x[0] * x.x[2];
-		H.a[3] = H.a[1];
-		H.a[4] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[1] * x.x[1]));
-		H.a[5] = 4.0 * rk * x.x[1] * x.x[2];
-		H.a[6] = H.a[2];
-		H.a[7] = H.a[5];
-		H.a[8] = 2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[2] * x.x[2] + tmp));
-	} else {
-		if (g2_x > 0.0) {
-			H.a[0] = 2.0 + rk;
-		} else {
-			H.a[0] = 2.0;
-		}
-		H.a[4] = H.a[8] = 2.0;
-		H.a[1] = H.a[2] = H.a[3] = H.a[5] = H.a[6] = H.a[7] = 0.0;
+	if (g1_x >= 0 || g2_x >= 0) {
+		return -(double)INFINITY;
 	}
-
-	return H;
-}
-
-inline mat3d_t hessian_int(const point3d_t x, const double rk) {
-	const double g1_x = -g1(x);
-	const double g2_x = -g2(x);
-	const double inv_g1_x = 1.0 / g1_x;
-	const double inv_g1_x2 = inv_g1_x * inv_g1_x;
-	const double z2 = x.x[2] * x.x[2];
-	const double h1 = 4.0 * rk * x.x[0] * x.x[1] * inv_g1_x2;
-	const double h2 = 4.0 * rk * x.x[0] * x.x[2] * inv_g1_x2;
-	const double h5 = 4.0 * rk * x.x[1] * x.x[2] * inv_g1_x2;
-	const mat3d_t H = {
-		2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[0] * x.x[0]) * inv_g1_x2),
-		h1,
-		h2,
-		h1,
-		2.0 * (1.0 + rk * (g1_x + 2.0 * x.x[1] * x.x[1]) * inv_g1_x2),
-		h5,
-		h2,
-		h5,
-		2.0 * (1.0 + rk * ((g1_x + 2.0 * z2) * inv_g1_x2 + 0.5 / z2))
-	};
-
-	return H;
+	return -rk * (log(-g1_x) + log(-g2_x));
 }
 
 inline double dotProduct3d(const point3d_t x, const point3d_t y) {
@@ -127,50 +83,6 @@ inline point3d_t mat_vec3d(const double alpha, const mat3d_t mat, const point3d_
 	                        alpha * (mat.a[3] * x.x[0] + mat.a[4] * x.x[1] + mat.a[5] * x.x[2]),
 	                        alpha * (mat.a[6] * x.x[0] + mat.a[7] * x.x[1] + mat.a[8] * x.x[2]) };
 	return vec;
-}
-
-inline double minor2d(const double m1, const double m2, const double m3, const double m4) {
-	return m1 * m4 - m3 * m2;
-}
-
-inline double det_mat3d(const mat3d_t mat) {
-	return mat.a[0] * minor2d(mat.a[4], mat.a[5], mat.a[7], mat.a[8]) -
-	       mat.a[1] * minor2d(mat.a[3], mat.a[5], mat.a[6], mat.a[8]) +
-	       mat.a[2] * minor2d(mat.a[3], mat.a[4], mat.a[6], mat.a[7]);
-}
-
-inline mat3d_t inversed_mat3d(const mat3d_t mat) {
-	const double det_mat = det_mat3d(mat);
-	mat3d_t inv_mat3d = { 0 };
-	if (det_mat != 0.0) {
-		const double inv_det_mat = 1.0 / det_mat;
-		inv_mat3d.a[0] =  mat.a[0] * inv_det_mat * minor2d(mat.a[4], mat.a[5], mat.a[7], mat.a[8]);
-		inv_mat3d.a[1] = -mat.a[3] * inv_det_mat * minor2d(mat.a[1], mat.a[2], mat.a[7], mat.a[8]);
-		inv_mat3d.a[2] =  mat.a[6] * inv_det_mat * minor2d(mat.a[1], mat.a[2], mat.a[4], mat.a[5]);
-		inv_mat3d.a[3] = -mat.a[1] * inv_det_mat * minor2d(mat.a[3], mat.a[5], mat.a[6], mat.a[8]);
-		inv_mat3d.a[4] =  mat.a[4] * inv_det_mat * minor2d(mat.a[0], mat.a[2], mat.a[6], mat.a[8]);
-		inv_mat3d.a[5] = -mat.a[7] * inv_det_mat * minor2d(mat.a[0], mat.a[2], mat.a[3], mat.a[5]);
-		inv_mat3d.a[6] =  mat.a[2] * inv_det_mat * minor2d(mat.a[3], mat.a[4], mat.a[6], mat.a[7]);
-		inv_mat3d.a[7] = -mat.a[5] * inv_det_mat * minor2d(mat.a[0], mat.a[1], mat.a[6], mat.a[7]);
-		inv_mat3d.a[8] =  mat.a[8] * inv_det_mat * minor2d(mat.a[0], mat.a[1], mat.a[3], mat.a[4]);
-	} else {
-		printf("ERR: Determinant = 0!\n");
-	}
-
-	return inv_mat3d;
-}
-
-inline bool isPositiveDefMat3d(const mat3d_t mat) {
-	// Sylvester's criterion
-	const double delta1 = mat.a[0];
-	const double delta2 = minor2d(mat.a[0], mat.a[1], mat.a[3], mat.a[4]);
-	const double delta3 = det_mat3d(mat);
-	if (delta1  > 0.0 || delta2  > 0.0 || delta3  > 0.0) {
-		return true;
-	} else {
-		//printf("No Positive-definite matrix!\n");
-		return false;
-	}
 }
 
 inline point3d_t grad_f_ext(const point3d_t x, const double rk) {
@@ -204,77 +116,84 @@ inline point3d_t grad_f_int(const point3d_t x, const double rk) {
 	return grad;
 }
 
-inline double findT_ext(const point3d_t x, const double rk, const point3d_t d) {
-	// Quadratic function: d^phi/dt^2 >= 0
-	const double g1_x = g1_cut(x);
-	const double g2_x = g2_cut(x);
-	const double dsum = d.x[0] + d.x[1] + d.x[2];
-	const double dotxd = dotProduct3d(x, d);
-	const double normd_2 = dotProduct3d(d, d);
-	const double main1 = 2.0 * (dsum - dotxd);
-	const double main2 = 2.0 * normd_2;
-	double res;
-	if (g1_x > 0.0) {
-		const double tmp1 = g2_x > 0 ? x.x[2] * d.x[2] : 0.0;
-		const double tmp2 = g2_x > 0 ? d.x[2] * d.x[2] : 0.0;
-		const double normx_2 = dotProduct3d(x, x);
-		res = (main1 - rk * (2.0 * normx_2 * dotxd + tmp1)) /
-		      (main2 + rk * (2.0 * normd_2 * normx_2 + 4.0 * dsum * dotxd + tmp2));
-	} else {
-		if (g2_x > 0.0) {
-			res = (main1 - rk * x.x[2] * d.x[2]) /
-			      (main2 + rk * d.x[2] * d.x[2]);
+inline double phi(const double t, const point3d_t x, const double rk, const point3d_t d, double(*p)(point3d_t, double)) {
+	const point3d_t xtd = add_vec3d(x, scalarmul_vec3d(t, d));
+	return f(xtd) + p(xtd, rk);
+}
+
+double methodGoldenSection(const segment_t seg, const double epsilon, const point3d_t x, const double rk, const point3d_t d, double(*p)(point3d_t, double)) {
+	//printf("Start The method of the Golden section...\n");
+	double ak = seg.a;
+	double bk = seg.b;
+	// (3 - sqrt(5))/2 ~ 0.3819660112501051
+	double yk,zk, f_yk, f_zk;
+	do {
+		bk = bk / 2;
+		yk = ak + 0.3819660112501051 * (bk - ak);
+		zk = ak + bk - yk;
+		f_yk = phi(yk, x, rk, d, p);
+		f_zk = phi(zk, x, rk, d, p);
+	} while (f_yk == -(double)INFINITY || f_zk == -(double)INFINITY);
+	double convergence;
+
+	uint16_t k = 0;
+	do {
+		if (f_yk <= f_zk) {
+			bk = zk;
+			zk = yk;
+			f_zk = f_yk;
+			yk = ak + bk - yk;
+			f_yk = phi(yk, x, rk, d, p);
 		} else {
-			res = main1 / main2;
+			ak = yk;
+			yk = zk;
+			f_yk = f_zk;
+			zk = ak + bk - zk;
+			f_zk = phi(zk, x, rk, d, p);
 		}
-	}
+		convergence = fabs(ak - bk);
+		k++;
+	} while (convergence > epsilon);
 
-	return res;
+	//printf("End The method of the Golden section\nIters = %" PRIu16 "\nConvergence = %e\n", k, convergence);
+
+	return (ak + bk) * 0.5;
 }
 
-inline double findT_int(const point3d_t x, const double rk, const point3d_t d) {
-	const double g1_x = g1(x);
-	const double dsum = d.x[0] + d.x[1] + d.x[2];
-	const double dotxd = dotProduct3d(x, d);
-	const double normd_2 = dotProduct3d(d, d);
-	const double d3 = d.x[2];
-	const double z = x.x[2];
-	const double tmp1 = dotxd * z;
-	const double tmp2 = d3 * g1_x;
-	const double tmp3 = dsum * z;
-	const double numerator = (tmp3 - tmp1) * g1_x + rk * (tmp1 + tmp2 * 0.5);
-	const double denominator = dotxd * (tmp1 * 2.0 - tmp2 - 2.0 * tmp3) -
-	                           dsum * tmp2 + normd_2 * z * g1_x -
-	                           rk * (2.0 * d3 * dotxd + tmp3);
-
-	return numerator / denominator;
+inline double findT(const point3d_t x, const double rk, const point3d_t d, double(*p)(point3d_t, double)) {
+	const segment_t seg = { 0, 100 };
+	const double epsilon = 1.0e-6;
+	const double tmin = methodGoldenSection(seg, epsilon, x, rk, d, p);
+	return tmin;
 }
 
-point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const uint32_t maxIter, const double rk,
-	double (*p)(point3d_t, double), mat3d_t (*hessian)(point3d_t, double), point3d_t (*grad_fun)(point3d_t, double),
-	double (*findT)(point3d_t x, double, point3d_t)) {
-	printf("Start Newton-Raphson Method...\n");
+point3d_t nonlinearConjugateGradientMethod(const point3d_t x0, const double epsilon, const uint32_t maxIter, const double rk,
+	double(*p)(point3d_t, double), point3d_t(*grad_fun)(point3d_t, double)) {
+	//printf("Start Nonlinear Conjugate Gradient Method...\n");
 	const double epsilon2 = epsilon * epsilon;
 	point3d_t xk1 = x0;
+	point3d_t d;
 	bool is_seq = false;
 	uint32_t k = 0;
-	double convergence;
+	double dot_grad_xk, convergence;
 
 	for (k; k < maxIter; ++k) {
 		const point3d_t grad_fun_xk1 = grad_fun(xk1, rk);
 		const double    dot_grad_xk1 = dotProduct3d(grad_fun_xk1, grad_fun_xk1);
 		if (dot_grad_xk1 < epsilon2) {
-			printf("grad f(xk) = %.e < epsilon = %.2e\n", sqrt(dot_grad_xk1), epsilon);
+			//printf("grad f(xk) = %.e < epsilon = %.2e\n", sqrt(dot_grad_xk1), epsilon);
 			break;
 		}
 
-		const mat3d_t H = hessian(xk1, rk);
-		const mat3d_t invH = inversed_mat3d(H);
-		const point3d_t d = isPositiveDefMat3d(invH) ? mat_vec3d(-1.0, H, grad_fun_xk1)
-		                                             : scalarmul_vec3d(-1.0, grad_fun_xk1);
+		if (k == 0) {
+			d = scalarmul_vec3d(-1.0, grad_fun_xk1);
+		} else {
+			const double beta = dot_grad_xk1 / dot_grad_xk;
+			d = add_vec3d(scalarmul_vec3d(beta, d), scalarmul_vec3d(-1.0, grad_fun_xk1));
+		}
 
 		const point3d_t xk = xk1;
-		const double t = findT(xk, rk, d);
+		const double t = findT(xk, rk, d, p);
 		const point3d_t xk1_minus_xk = scalarmul_vec3d(t, d);
 		xk1 = add_vec3d(xk1, xk1_minus_xk);
 
@@ -289,10 +208,11 @@ point3d_t methodNewtonRaphson(const point3d_t x0, const double epsilon, const ui
 		} else {
 			is_seq = false;
 		}
+		dot_grad_xk = dot_grad_xk1;
 	}
 
-	printf("Iters = %" PRIu32 "\nConvergence = %.2e\n", k, sqrt(convergence));
-	printf("End Newton-Raphson Method.\n");
+	//printf("Iters = %" PRIu32 "\nConvergence = %.2e\n", k, sqrt(convergence));
+	//printf("End Nonlinear Conjugate Gradient Method.\n");
 	return xk1;
 }
 
